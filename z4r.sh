@@ -14,32 +14,43 @@ plain='\033[0m'
 #___Сначала идут анонсы функций____
 
 get_yt_cluster_domain() {
-    local letters_list_a=('u' 'z' 'p' 'k' 'f' 'a' '5' '0' 'v' 'q' 'l' 'g' 'b' '6' '1' 'w' 'r' 'm' 'h' 'c' '7' '2' 'x' 's' 'n' 'i' 'd' '8' '3' 'y' 't' 'o' 'j' 'e' '9' '4' '-')
-    local letters_list_b=('0' '1' '2' '3' '4' '5' '6' '7' '8' '9' 'a' 'b' 'c' 'd' 'e' 'f' 'g' 'h' 'i' 'j' 'k' 'l' 'm' 'n' 'o' 'p' 'q' 'r' 's' 't' 'u' 'v' 'w' 'x' 'y' 'z' '-')
-    letters_map_a="${letters_list_a[*]}"
-    letters_map_b="${letters_list_b[*]}"
-    cluster_codename=$(curl -s --max-time 2 "https://redirector.xn--ngstr-lra8j.com/report_mapping?di=no"| sed -n 's/.*=>[[:space:]]*\([^ (:)]*\).*/\1/p')
-	#Второй раз для пробития нерелевантного ответа
-	cluster_codename=$(curl -s --max-time 2 "https://redirector.xn--ngstr-lra8j.com/report_mapping?di=no"| sed -n 's/.*=>[[:space:]]*\([^ (:)]*\).*/\1/p')
 
-    [ -z "$cluster_codename" ] && {
-        echo "Не удалось получить cluster_codename. Используем тогда rr1---sn-5goeenes.googlevideo.com" >&2
-		echo "rr1---sn-5goeenes.googlevideo.com"
+    letters_list_a="u z p k f a 5 0 v q l g b 6 1 w r m h c 7 2 x s n i d 8 3 y t o j e 9 4 -"
+    letters_list_b="0 1 2 3 4 5 6 7 8 9 a b c d e f g h i j k l m n o p q r s t u v w x y z -"
+
+    cluster_codename="$(curl -s --max-time 2 \
+        "https://redirector.xn--ngstr-lra8j.com/report_mapping?di=no" \
+        | sed -n 's/.*=>[[:space:]]*\([^ (:)]*\).*/\1/p')"
+
+    # второй запрос — как в оригинале
+    cluster_codename="$(curl -s --max-time 2 \
+        "https://redirector.xn--ngstr-lra8j.com/report_mapping?di=no" \
+        | sed -n 's/.*=>[[:space:]]*\([^ (:)]*\).*/\1/p')"
+
+    if [ -z "$cluster_codename" ]; then
+        echo "rr1---sn-5goeenes.googlevideo.com"
         return
-    }
+    fi
 
     converted_name=""
-	while [ $i -lt $len ]; do
-        char="${cluster_codename:$i:1}"
+    i=1
+    len="$(printf "%s" "$cluster_codename" | wc -c)"
+
+    while [ "$i" -le "$len" ]; do
+        char="$(printf "%s" "$cluster_codename" | cut -c "$i")"
+
         idx=1
         for a in $letters_list_a; do
             [ "$a" = "$char" ] && break
-            idx=$((idx+1))
+            idx="$(expr "$idx" + 1)"
         done
-        b=$(echo "$letters_list_b" | cut -d' ' -f "$idx")
+
+        b="$(echo "$letters_list_b" | cut -d' ' -f "$idx")"
         converted_name="${converted_name}${b}"
-        i=$((i+1))
+
+        i="$(expr "$i" + 1)"
     done
+
     echo "rr1---sn-${converted_name}.googlevideo.com"
 }
 
@@ -78,7 +89,7 @@ exit_to_menu() {
 #Запрос на резервирование настроек в подборе стратегий
 backup_strats() {
   if [ -d /opt/zapret/extra_strats ]; then
-    read -re -p $'\033[0;33mХотите сохранить текущие настройки ручного подбора стратегий? Не рекомендуется. (\"5\" - сохранить, Enter - нет\n"0" - прервать операцию): \033[0m' answer_backup
+    read -re -p $'\033[0;33mХотите сохранить текущие настройки ручного подбора стратегий? Не рекомендуется. (5 - сохранить, Enter - нет\n0 - прервать операцию): \033[0m' answer_backup
     if [[ "$answer_backup" == "5" ]]; then
 		cp -rf /opt/zapret/extra_strats /opt/
   		echo "Настройки подбора резервированы."
@@ -254,55 +265,69 @@ remove_zapret() {
  fi
 }
 
-#Запрос желаемой версии zapret или выход из скрипта для удаления
+# Запрос желаемой версии zapret
 version_select() {
     while true; do
-		read -re -p $'\033[0;32mВведите желаемую версию zapret (Enter для новейшей версии): \033[0m' USER_VER
-        # Если пустой ввод — берем значение по умолчанию
-		if [ -z "$USER_VER" ]; then
-    	 if [ -z "$USER_VER" ]; then
-    	 VER1=$(curl -sL https://api.github.com/repos/bol-van/zapret/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-    	 VER2=$(curl -sL https://api.github.com/repos/bol-van/zapret/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4 | sed 's/^v//')
-    	 VER3=$(curl -sL https://api.github.com/repos/bol-van/zapret/releases/latest | grep '"tag_name":' | sed -r 's/.*"v([^"]+)".*/\1/')
-    	 VER4=$(curl -sL https://api.github.com/repos/bol-van/zapret/releases/latest | grep '"tag_name":' | awk -F'"' '{print $4}' | sed 's/^v//')
-		 fi
-	     # проверяем результаты по порядку
-    	 if [ ${#VER1} -ge 2 ]; then
-       	  VER="$VER1"
-       	  METHOD="sed -E"
-    	 elif [ ${#VER2} -ge 2 ]; then
-       	  VER="$VER2"
-       	  METHOD="grep+cut"
-    	 elif [ ${#VER3} -ge 2 ]; then
-          VER="$VER3"
-          METHOD="sed -r"
-    	 elif [ ${#VER4} -ge 2 ]; then
-       	  VER="$VER4"
-       	  METHOD="awk"
-    	 else
-          echo -e "${yellow}Не удалось получить информацию о последней версии с GitHub. Будет использоваться версия $DEFAULT_VER.${plain}"
-          VER="$DEFAULT_VER"
-          METHOD="default"
-    	 fi
-	     # краткий отчёт
-    	 echo -e "${yellow}Проверка версий:${plain}"
-    	 echo "  sed -E   : $VER1"
-    	 echo "  grep+cut : $VER2"
-    	 echo "  sed -r   : $VER3"
-    	 echo "  awk      : $VER4"
-    	 echo -e "${green}Выбрано: $VER (метод: $METHOD)${plain}"
-    	 break
-		fi
-        # Считаем длину
+        read -re -p $'\033[0;32mВведите желаемую версию zapret (Enter для новейшей версии): \033[0m' USER_VER
+
+        # === Если нажали Enter — получаем последнюю версию ===
+        if [ -z "$USER_VER" ]; then
+            # Получаем ответ один раз
+            API_RESPONSE=$(curl -sL https://api.github.com/repos/bol-van/zapret/releases/latest)
+
+            VER1=$(echo "$API_RESPONSE" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+            VER2=$(echo "$API_RESPONSE" | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4 | sed 's/^v//')
+            VER3=$(echo "$API_RESPONSE" | grep '"tag_name":' | sed 's/.*"v\([^"]*\)".*/\1/')
+            VER4=$(echo "$API_RESPONSE" | awk -F'"' '/tag_name/ {print $4}' | sed 's/^v//')
+
+            # Выбор первого валидного результата
+            if [ ${#VER1} -ge 2 ]; then
+                VER="$VER1"
+                METHOD="sed -E"
+            elif [ ${#VER2} -ge 2 ]; then
+                VER="$VER2"
+                METHOD="grep+cut"
+            elif [ ${#VER3} -ge 2 ]; then
+                VER="$VER3"
+                METHOD="sed (posix)"
+            elif [ ${#VER4} -ge 2 ]; then
+                VER="$VER4"
+                METHOD="awk"
+            else
+                echo -e "${yellow}Не удалось получить последнюю версию с GitHub. Используется версия $DEFAULT_VER.${plain}"
+                VER="$DEFAULT_VER"
+                METHOD="default"
+            fi
+
+            # Отчёт
+            echo -e "${yellow}Проверка версий:${plain}"
+            echo "  sed -E   : $VER1"
+            echo "  grep+cut : $VER2"
+            echo "  sed posix: $VER3"
+            echo "  awk      : $VER4"
+            echo -e "${green}Выбрано: $VER (метод: $METHOD)${plain}"
+
+            break
+        fi
+
+        # === Если версия введена вручную ===
         LEN=${#USER_VER}
-        # Проверка длины и знака %
-        if (( LEN > 4 )); then
-            echo "Некорректный ввод. Максимальная длина — 4 символа. Попробуйте снова."
+        if [ "$LEN" -gt 4 ]; then
+            echo "Некорректный ввод. Максимальная длина — 4 символа."
             continue
         fi
+
+        # Простая валидация формата (цифры и точки)
+        if ! echo "$USER_VER" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
+            echo "Некорректный формат версии. Пример: 72.3"
+            continue
+        fi
+
         VER="$USER_VER"
+        METHOD="manual"
         break
     done
+
     echo "Будет использоваться версия: $VER"
 }
 
@@ -583,7 +608,10 @@ Enter (без цифр) - переустановка/обновление zapret
      # Был только 443 → добавляем порты и убираем --skip, удаляем скрипты
      sed -i '76s/443$/443,1400,3478-3481,5349,50000-50099,19294-19344/' /opt/zapret/config
 	 sed -i 's/^--skip --filter-udp=50000/--filter-udp=50000/' "/opt/zapret/config"
-	 rm -f \opt\zapret\init.d\sysv\custom.d\50-discord-media \opt\zapret\init.d\sysv\custom.d\50-stun4all /opt/zapret/init.d/openwrt/custom.d/50-stun4all /opt/zapret/init.d/openwrt/custom.d/50-discord-media
+	 rm -f /opt/zapret/init.d/sysv/custom.d/50-discord-media \
+      /opt/zapret/init.d/sysv/custom.d/50-stun4all \
+      /opt/zapret/init.d/openwrt/custom.d/50-stun4all \
+      /opt/zapret/init.d/openwrt/custom.d/50-discord-media
      echo -e "${green}Уход от скриптов bol-van. Выделены порты 50000-50099,1400,3478-3481,5349 и раскомментированы стратегии DS, WA, TG${plain}"
 	elif grep -q '443,1400,3478-3481,5349,50000-50099,19294-19344$' "/opt/zapret/config"; then
      # Уже расширенный список → возвращаем к 443 и добавляем --skip, возвращаем скрипты
